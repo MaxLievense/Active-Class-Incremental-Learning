@@ -1,0 +1,10 @@
+defaults:
+  - ../../data/transforms@transforms: ResNet_resizes
+
+
+pretrained: DEFAULT
+freeze: True
+extra_fc: 256
+
+layers: 
+bottleneck: 

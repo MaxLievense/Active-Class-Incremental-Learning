@@ -1,0 +1,9 @@
+defaults:
+  - trainer
+  - scheduler/StepLR
+
+_target_: src.trainer.trainer.SteppedTrainer
+
+iterations: 10
+steps: 2
+  

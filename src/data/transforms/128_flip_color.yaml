@@ -1,0 +1,10 @@
+- torchvision.transforms.RandomResizedCrop:
+    size: [128, 128]
+    antialias: True
+- torchvision.transforms.RandomHorizontalFlip:
+- torchvision.transforms.ColorJitter:
+    brightness: 0.4
+    contrast: 0.4
+    saturation: 0.4
+    hue: 0
+- torchvision.transforms.ToTensor:

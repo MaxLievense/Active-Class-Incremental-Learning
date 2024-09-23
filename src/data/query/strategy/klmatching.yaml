@@ -1,0 +1,2 @@
+_target_: src.data.query.strategy.klmatching.KLMatching
+name: KLMatching

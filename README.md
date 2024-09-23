@@ -1,6 +1,101 @@
+# WIP
 # Novelty detection with Active Class-Incremental Learning on Long-tailed datasets
 
-This repository contains the research framework used of the paper:
-Novelty detection with Active Class-Incremental Learning on Long-tailed datasets by M. Lievense.
+This repository contains the research framework used in the paper: 
+"Novelty detection with Active Class-Incremental Learning on Long-tailed datasets."
 
-## WIP
+## Results
+WIP
+
+# Codebase
+This repository contains the scripts required to run the experiments from the corresponding paper. The code is licensed under the ["**CC BY-NC 4.0**" license](https://creativecommons.org/licenses/by-nc/4.0/); feel free to adapt the code as long as appropriate credit is provided. The code cannot be used for commercial purposes.
+
+## Configurations with Hydra
+The code base runs using [Hydra](https://hydra.cc/docs/intro/) configurations, which may have a learning curve to use.
+In short, there are three command line functions you need to know:
+- **Overwriting a single variable:** Access the variable like this: `trainer.epochs=10`, where `trainer` is the module, `epochs` is the variable, and `10` is the value it should be changed to.
+- **Adding yaml config (`+`):** By default, no modules are added, therefore `+trainer=steppedtrainer` is required to include a trainer for the run. `trainer` is the module and `steppedtrainer` refers to the `steppedtrainer.yaml` file. Its contents will be placed under `trainer`.
+
+    If the yaml is nested in another folder, you may need to use `+model/ResNet@model.network=ResNet50`, where the contents of `model/ResNet/ResNet50.yaml` will be placed under `model.network`.
+- **Removing a module (`~`)**: `~data.dataset.val` will remove the module `data.dataset.val` and all its contents from the run.
+
+## Installation
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Data preperation
+- **Places365-LT** and **ImageNet-LT**: We reuse the data preparation of [OLTR](https://github.com/zhmiao/OpenLongTailRecognition-OLTR?tab=readme-ov-file#data-preparation). We also use their annotations and their open-set dataset.
+> **Note**: The ImageNet version is **2012**, not 2014.
+- **iNaturalist2018(-Plantae)**: Download the dataset from this repository [iNaturalist2018](https://github.com/visipedia/inat_comp/tree/master/2018#Data).
+
+Your `data/` directory should look like this, with the .txt files inside the corresponding folders (e.g., `data/Places365/Places_LT_train.txt`):
+
+```
+data
+  ├──ImageNet2012
+  │  ├──ImageNet_LT_open
+  │  ├──test
+  │  ├──train
+  │  └──val
+  ├──Places365
+  │  ├──data_256
+  │  ├──Places_LT_open
+  │  ├──test_256
+  │  └──val_256
+  └──iNaturalist2018
+     └──train_val2018
+```
+
+### Other datasets
+Any dataset can be adapted to work within this research framework. We have included `torchvision`'s MNIST dataset in `src/data/dataset/MNIST.yaml` to demonstrate the configurations. 
+
+## Running experiments
+### Single step Open-set Recognition
+``` bash
+python3 src/main.py --config-name=osr \
+    +data/dataset=Places365_LT \
+    +data/query/strategy=energy \
+    +model/ResNet@model.network=ResNet50 \
+    # Frozen
+    +trainer=trainer +trainer/scheduler=StepLR +model=queryaftertrain 
+    # Both
+    +trainer=finetuned +model=steppedmodelAL
+```
+
+### Active Class-Incremental Learning
+``` bash
+python3 src/main.py --config-name=osr \
+    +data/dataset=Places365_LT \
+    ~data.dataset.val \
+    +data/query/strategy=energy \
+    +model/ResNet@model.network=ResNet50 \
+    # Frozen
+    +trainer=steppedtrainer +trainer/scheduler=StepLR 
+    # Both
+    +trainer=finetuned +model=steppedmodelAL
+```
+For ACIL, `~data.dataset.val` is required, otherwise the predefined validation set is used.
+
+### Configurations
+- **Datasets**:
+    - Places365-LT: `+data/dataset=Places365_LT`
+    - ImageNet-LT: `+data/dataset=ImageNet_LT`
+    - iNaturalist2018-Plantae: `+iNaturalist2018_Partial data.dataset.data.families=[Plantae]`
+- **Pretrained models**: `model.network.pretrained=<PATH_TO_MODEL>`
+- **Trainable parameters**:
+    Frozen and Both are configured through the trainer (`steppedtrainer` and `finetuned`, respectively).
+    - **Reload**: `model.reload_model_on_new_classes=True`
+    - **Continuous**: `model.reload_model_on_new_classes=False model.fc.transfer_weights=True`
+- **Querying**:
+    - Initial size: `data.initial.size=<INT>`
+    - Query size: `data.query.n_samples=<INT>` (by default, this is the same as `data.initial.size`)
+    - Iterations: `trainer.iterations=<INT>`
+- **Detectors**:
+    `DETECTOR_NAME`: one of `Random, Uncertainty, Margin, KLMatching, Energy, Entropy, KNN, ViM, ReAct, DICE, SHE, ASH-s, ASH-b, ASH-p, RMD, ODIN`
+    - Single detector: `+data/query/strategy=<DETECTOR_NAME>`
+    - Single detector, but check multiple: `data/query=query_checkall data.query.strategy.name=<DETECTOR_NAME>`
+    - Hybrid detectors: # TODO
+- **Seed**: `seed=<INT>`

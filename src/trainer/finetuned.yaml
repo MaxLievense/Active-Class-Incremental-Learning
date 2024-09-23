@@ -1,0 +1,8 @@
+defaults:
+  - steppedtrainer
+  - scheduler@scheduler.fc: StepLR
+  - scheduler@scheduler.backbone: OneCycleLR
+
+_target_: src.trainer.trainer.FinetunedTrained
+
+steps: 1

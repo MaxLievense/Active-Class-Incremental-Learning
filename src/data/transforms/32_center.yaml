@@ -1,0 +1,3 @@
+- torchvision.transforms.Resize:
+    size: [32, 32]
+- torchvision.transforms.ToTensor:

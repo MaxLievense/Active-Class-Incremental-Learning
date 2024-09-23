@@ -1,0 +1,4 @@
+defaults:
+  # - eval/eval
+  - wandb/wandb
+_target_: src.trainer.callbacks.callbacks.Callbacks
