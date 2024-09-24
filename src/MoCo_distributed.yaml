@@ -1,0 +1,6 @@
+defaults:
+  - main
+  - data: normal
+  - external/MoCo@trainer: moco_distributed
+  - slurm
+  - _self_

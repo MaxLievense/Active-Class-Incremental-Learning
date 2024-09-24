@@ -99,3 +99,25 @@ For ACIL, `~data.dataset.val` is required, otherwise the predefined validation s
     - Single detector, but check multiple: `data/query=query_checkall data.query.strategy.name=<DETECTOR_NAME>`
     - Hybrid detectors: # TODO
 - **Seed**: `seed=<INT>`
+
+### Pretraining with MoCo
+If you are using MoCo, please refer to [their repository](https://github.com/facebookresearch/moco.git) for more information. 
+
+To include it, please use:
+```bash
+    git submodule add https://github.com/facebookresearch/moco.git external/moco/moco
+```
+
+Depending on your available resources, you might need to adapt their `main.py`. I included my adaptation, which was run on a slurm cluster, implying that multiple nodes were connected through a local network. The model used in the paper was trained with the following command line, where `<RANK>` is `[0-3]` (as `world_size=4`), `MASTER_HOSTNAME` is the address to `RANK=0`, and `PORT` is an available port in the network.
+``` bash
+    python3 -u external/moco/main.py --config-name=MoCo_distributed \
+    +data/dataset=Places365_LT  \
+    trainer.arch=resnet50 \
+    trainer.epochs=600 \
+    trainer.workers=16 \
+    seed=1 \
+    trainer.dist_url=tcp://<MASTER_HOSTNAME:PORT> \
+    trainer.world_size=4 \
+    trainer.rank=<RANK> \
+    trainer.batch_size=256
+```
