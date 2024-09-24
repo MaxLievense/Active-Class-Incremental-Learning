@@ -1,5 +1,0 @@
-defaults:
-  - classincremental
-
-_target_: src.model.classincremental.QueryAfterTrain
-query: True

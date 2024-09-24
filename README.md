@@ -50,32 +50,34 @@ data
 ```
 
 ### Other datasets
-Any dataset can be adapted to work within this research framework. We have included `torchvision`'s MNIST dataset in `src/data/dataset/MNIST.yaml` to demonstrate the configurations. 
+Any dataset can be adapted to work within this research framework. We have included `torchvision`'s MNIST dataset in `ACIL/data/dataset/MNIST.yaml` to demonstrate the configurations. 
 
 ## Running experiments
 ### Single step Open-set Recognition
 ``` bash
-python3 src/main.py --config-name=osr \
+python3 ACIL/main.py --config-name=osr \
+    # Frozen
+    +trainer=trainer +trainer/scheduler=StepLR +model=queryaftertrain \
+    # Both
+    +trainer=finetuned +model=steppedmodelAL \
+    \
     +data/dataset=Places365_LT \
     +data/query/strategy=energy \
-    +model/ResNet@model.network=ResNet50 \
-    # Frozen
-    +trainer=trainer +trainer/scheduler=StepLR +model=queryaftertrain 
-    # Both
-    +trainer=finetuned +model=steppedmodelAL
+    +model/ResNet@model.network=ResNet50 
 ```
 
 ### Active Class-Incremental Learning
 ``` bash
-python3 src/main.py --config-name=osr \
+python3 ACIL/main.py --config-name=osr \
+    # Frozen
+    +trainer=steppedtrainer +trainer/scheduler=StepLR \ 
+    # Both
+    +trainer=finetuned +model=steppedmodelAL \ 
+    \
     +data/dataset=Places365_LT \
     ~data.dataset.val \
     +data/query/strategy=energy \
-    +model/ResNet@model.network=ResNet50 \
-    # Frozen
-    +trainer=steppedtrainer +trainer/scheduler=StepLR 
-    # Both
-    +trainer=finetuned +model=steppedmodelAL
+    +model/ResNet@model.network=ResNet50 
 ```
 For ACIL, `~data.dataset.val` is required, otherwise the predefined validation set is used.
 

@@ -1,8 +1,0 @@
-defaults:
-  - base
-
-_target_: src.model.ResNet.ResNet.ResNet50
-name: ResNet50
-
-layers: [3, 4, 6, 3]
-bottleneck: 2048

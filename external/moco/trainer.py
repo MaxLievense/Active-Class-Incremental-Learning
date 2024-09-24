@@ -5,22 +5,22 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
+import hydra
 import torch
 import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torchvision import transforms
 
-import hydra
-from src.base import Base
-from src.main import Runner
-from src.utils.module import import_from_cfg
-from src.utils.subsets import Subset
+from ACIL.main import Runner
+from ACIL.utils.base import Base
+from ACIL.utils.module import import_from_cfg
+from ACIL.utils.subsets import Subset
 
 if TYPE_CHECKING:
     from omegaconf import DictConfig
 
-    from src.data.data import Data
+    from ACIL.data.data import Data
 
 REPO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moco")
 sys.path.append(REPO_PATH)
@@ -127,12 +127,14 @@ class MoCo_Trainer(Base):
             total_acc_1 += acc1[0]
             total_acc_5 += acc5[0]
 
-        wandb.log({
-            "moco/loss": total_loss,
-            "moco/acc_1": total_acc_1/img_counter,
-            "moco/acc_5": total_acc_5/img_counter,
-            "moco/epoch": epoch,
-        })
+        wandb.log(
+            {
+                "moco/loss": total_loss,
+                "moco/acc_1": total_acc_1 / img_counter,
+                "moco/acc_5": total_acc_5 / img_counter,
+                "moco/epoch": epoch,
+            }
+        )
 
 
 @hydra.main(version_base="1.2", config_path="../../src", config_name="main")

@@ -1,5 +1,0 @@
-_target_: src.model.criterions.MSELoss.MSELoss
-
-size_average:
-reduce:
-reduction: mean

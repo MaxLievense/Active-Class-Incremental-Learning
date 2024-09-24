@@ -1,5 +1,0 @@
-defaults:
-  - base
-
-_target_: src.model.ResNet.ResNet.WideResNet50
-name: WideResNet50

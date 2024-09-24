@@ -1,0 +1,4 @@
+defaults:
+  # - eval/eval
+  - wandb/wandb
+_target_: ACIL.trainer.callbacks.callbacks.Callbacks

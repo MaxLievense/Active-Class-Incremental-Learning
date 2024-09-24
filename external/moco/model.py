@@ -2,11 +2,11 @@ import os
 
 import torch
 import torchvision.models as models
-from external.moco.moco.moco.builder import MoCo as MoCo_model
 from omegaconf import DictConfig
 from torch.nn import CrossEntropyLoss
 
-from src.base import Base
+from ACIL.utils.base import Base
+from external.moco.moco.moco.builder import MoCo as MoCo_model
 
 
 class MoCo(Base):

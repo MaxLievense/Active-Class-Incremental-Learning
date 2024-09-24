@@ -1,4 +1,0 @@
-_target_: src.trainer.callbacks.stop.loss.Loss
-
-warmup: 5
-patience: 10

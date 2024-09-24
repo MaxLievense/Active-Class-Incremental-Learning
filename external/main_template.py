@@ -4,10 +4,10 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
+import hydra
 from hydra.utils import instantiate
 
-import hydra
-from src.main import Runner
+from ACIL.main import Runner
 
 if TYPE_CHECKING:
     from omegaconf import DictConfig
