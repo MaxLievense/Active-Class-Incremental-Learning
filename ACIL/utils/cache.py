@@ -6,6 +6,7 @@ def cache_file(func):
     """Decorator to cache the result of a function in a file."""
 
     def wrapper(*args, **kwargs):
+        """Wrapper function to cache the result of a function in a file."""
         if isinstance(args[0], dict):
             log_or_print = args[0].get("log").info if args[0].get("log") else print
             cache = args[0].get("cache", None)

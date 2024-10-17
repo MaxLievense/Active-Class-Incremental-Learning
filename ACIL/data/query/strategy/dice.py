@@ -6,10 +6,13 @@ from ACIL.data.query.strategy.base import BaseStrategy
 
 
 class DICE(dice, BaseStrategy):
+    """Interface for DICE strategy."""
+
     use_fit = True
     use_features = True
 
     def __init__(self, model, name, **cfg) -> None:
+        """Initializes the strategy."""
         backbone = model.network.forward_backbone
         weights = (
             model.network.fc.weight if isinstance(model.network.fc, torch.nn.Linear) else model.network.fc[0].weight
@@ -18,9 +21,11 @@ class DICE(dice, BaseStrategy):
         super().__init__(model=backbone, w=weights, b=bias, **cfg)
 
     def fit_features(self, features, labels):
+        """Fits the features."""
         return super().fit_features(z=features, y=labels)
 
     def predict_features(self, features):
+        """Predicts the features."""
         return super().predict_features(x=features)
 
     def select(self, scores: np, n_samples: int) -> np:

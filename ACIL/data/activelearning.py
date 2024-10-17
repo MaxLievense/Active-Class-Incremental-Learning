@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from copy import deepcopy
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import hydra
 import numpy as np
@@ -15,43 +15,59 @@ from ACIL.data.data import Data
 from ACIL.utils.subsets import Subset
 
 if TYPE_CHECKING:
+    from torchvision import transforms
+
     from ACIL.data.query.query import Query
+    from ACIL.model.model import BaseModel as Model
 
 
 class ActiveLearning(Data):
+    """Variants of the data module that are used for active learning."""
+
     def __init__(
         self,
         device: torch.device,
-        dataset_transforms: list,
-        model_transforms: list,
-        training_transforms: list,
         **cfg: dict,
-    ) -> None:
+    ):
+        """
+        Initializes the ActiveLearning object.
+
+        Args:
+            device (torch.device): Device to run the data on.
+            dataset_transforms (list): List of dataset transforms to apply.
+            model_transforms (list): List of model transforms to apply.
+            training_transforms (list): List of training transforms to apply.
+            **cfg (dict): Hydra configuration.
+        """
         _cfg = DictConfig(cfg)
         assert (
             not _cfg.dataset.tail or _cfg.dataset.get("tail", {}).get("val", False) is False
         ), "Validation data is not supported."
-        super().__init__(device, dataset_transforms, model_transforms, training_transforms, **cfg)
+        super().__init__(device, **cfg)
 
-    def get_dataset(self, dataset_cfg: DictConfig) -> None:
-        self.log.debug("Building dataset...")
-        self._init_dataset(dataset_cfg)
+    def get_dataset(self) -> None:
+        """Builds the dataset."""
+        self._init_dataset()
 
-        self.n_classes = dataset_cfg.n_classes if dataset_cfg.n_classes > 0 else len(np.unique(self.train_data.targets))
-        print(f"Found {self.n_classes} classes (self.n_classes).")
+        self.n_classes = (
+            self.cfg.dataset.n_classes if self.cfg.dataset.n_classes > 0 else len(np.unique(self.train_data.targets))
+        )
 
         self.labelled_idx = None
         self.unlabelled_idx = None
 
         self.log.debug(f"Dataset contains {len(self.train_data)} train & {len(self.test_data)} test samples")
-        self._make_tailed_dataset(dataset_cfg)
+        self._make_tailed_dataset()
         if not isinstance(self.train_data, Subset):
             self.train_data = Subset(self.train_data, indices=list(range(len(self.train_data))))
         self._label_initial_data()
         self._make_open_dataset()
         self._limit_dataset()
 
-    def _label_initial_data(self):
+    def _label_initial_data(self) -> None:
+        """
+        Label the initial data D_I.
+        """
         np.random.seed(self.cfg.seed)
         if self.cfg.initial.type == "random":
             if str(self.cfg.initial.size).endswith("%"):
@@ -79,7 +95,8 @@ class ActiveLearning(Data):
             + f"and {len(self.unlabelled_idx)} unlabelled samples."
         )
 
-    def _make_open_dataset(self):
+    def _make_open_dataset(self) -> None:
+        """Make the open dataset based on the configuration."""
         if "open" in self.cfg:
             self.log.warning("Open classes are not supported.")
 
@@ -100,7 +117,8 @@ class ActiveLearning(Data):
         if self.cfg.initial.reorder:
             self._reorder_classes()
 
-    def get_loaders(self, dataloader_cfg: DictConfig = None):
+    def get_loaders(self, dataloader_cfg: DictConfig = None) -> None:
+        """Builds the dataloaders."""
         dataloader_cfg = dataloader_cfg or self.cfg.dataloaders
         self.train_plain_data = self.plain_data
         if not isinstance(self.val_data, (Subset, Dataset)):
@@ -109,13 +127,30 @@ class ActiveLearning(Data):
         self.labelled_loader = instantiate(dataloader_cfg.labelled_loader, dataset=self.train_data)
         self.unlabelled_loader = instantiate(dataloader_cfg.unlabelled_loader, dataset=self.unlabelled_data)
 
-    def get_query(self, model) -> Query:
+    def get_query(self, model: Model) -> Query:
+        """
+        Initializes the query object.
+
+        Args:
+            model (Model): Model to use for querying.
+        Returns:
+            Query: Query object.
+        """
         if not hasattr(self, "query_counter"):
             self.query_counter = 2
         self.query = instantiate(self.cfg.query, data=self, model=model, counter=self.query_counter, _recursive_=False)
         return self.query
 
     def label_idx(self, idx: Union[int, list], subset_index: bool = False) -> list:
+        """
+        Labels the given indices and returns the feedback.
+
+        Args:
+            idx (Union[int, list]): Index or list of indices to label.
+            subset_index (bool): Whether the indices are subset indices.
+        Returns:
+            list: Feedback for the queried indices.
+        """
         if isinstance(idx, int):
             idx = [idx]
 
@@ -164,6 +199,11 @@ class ActiveLearning(Data):
     def indexs_to_class_counts(self, idx: list) -> list:
         """
         Convert the indices to the class count.
+
+        Args:
+            idx (list): List of indices.
+        Returns:
+            list: List of class counts
         """
         _, training_counts = np.unique(self.train_data.targets, return_counts=True)
         counts = []
@@ -172,8 +212,13 @@ class ActiveLearning(Data):
             counts.append(training_counts[training_label])
         return counts
 
-    def discover_class(self, open_class: int):
-        """Discover open class, i.e. remove it from open classes and add it to class mapping."""
+    def discover_class(self, open_class: int) -> None:
+        """
+        Discover open class, i.e. remove it from open classes and add it to class mapping.
+
+        Args:
+            open_class (int): Open class to discover.
+        """
         assert open_class in self.open_classes
         assert open_class not in self.closed_classes
         assert self.class_mapping[open_class] == -1
@@ -188,9 +233,18 @@ class ActiveLearning(Data):
         self.log.info(f"Discovered open class {open_class}, now {self.class_mapping[open_class]}.")
 
     def is_idx_ood(self, idx: int) -> bool:
+        """
+        Check if the given index is out-of-distribution (novel class).
+
+        Args:
+            idx (int): Index to check.
+        Returns:
+            bool: Whether the index is out-of-distribution.
+        """
         return self.all_train_data.dataset.targets[idx] in self.open_classes
 
     def write_counts_to_file(self):
+        """Write the class counts to a file."""
         try:
             path = os.path.join(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir, "results.txt")
         except AttributeError:
@@ -219,18 +273,39 @@ class ActiveLearning(Data):
 
 
 class GenericDatasetWrapper(Dataset):
-    def __init__(self, dataset: Dataset, transform=None, target_transform=None):
+    """Wrapper for a dataset that adds the index to the output. Used by D_U for querying."""
+
+    def __init__(
+        self, dataset: Dataset, transform: Optional[transforms] = None, target_transform: Optional[transforms] = None
+    ):
+        """
+        Initializes the GenericDatasetWrapper.
+
+        Args:
+            dataset (Dataset): Dataset to wrap.
+            transform (Optional[transforms]): Transform to apply.
+            target_transform (Optional[transforms]): Target transform to apply.
+        """
         self.dataset = dataset
         self.targets = dataset.targets
         self.transform = transform
         self.target_transform = target_transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, bool, int]:
+        """
+        Get the item at the given index. Returns the image, label and sample index.
+        Label represents whether the class was known or not.
+
+        Args:
+            index (int): Index of the item.
+        Returns:
+            Tuple[torch.Tensor, bool, int]: Image, label and index.
+        """
         original_output = self.dataset.__getitem__(index)
         img, label = original_output
 
-        # Add the index to the output
         return img, label != -1, index
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Returns the length of the dataset."""
         return len(self.dataset)

@@ -7,6 +7,7 @@ pytest==8.0.0
 pytest-catchlog==1.2.2
 pytest-mock==3.12.0
 pytest-unordered==0.5.2
+pytorch-ood==0.1.7
 scikit-learn==1.2.2
 scipy==1.10.1
 torch==2.0.1

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING, Tuple, Union
 
 import numpy as np
 import torch
 import wandb
-from data.activelearning import ActiveLearning
 from hydra.utils import instantiate
 from pytorch_ood.utils import TensorBuffer, is_known
 
@@ -13,9 +15,27 @@ from ACIL.utils.base import Base
 from ACIL.utils.metrics import class_coverage, openset_recognition
 from ACIL.utils.parse import match_parameters
 
+if TYPE_CHECKING:
+    from torch.utils.data import DataLoader
+
+    from ACIL.data.activelearning import ActiveLearning
+    from ACIL.model.model import BaseModel as Model
+    from ACIL.trainer.trainer import BaseTrainer as Trainer
+
 
 class Query(Base):
-    def __init__(self, data: ActiveLearning, model: torch.nn.Module, counter: int, **cfg):
+    """Query module for active learning."""
+
+    def __init__(self, data: ActiveLearning, model: torch.nn.Module, counter: int, **cfg: dict):
+        """
+        Initializes the Query module.
+
+        Args:
+            data (ActiveLearning): ActiveLearning object.
+            model (torch.nn.Module): Model object.
+            counter (int): Query counter.
+            **cfg (dict): Hydra configuration
+        """
         super().__init__(cfg)
         self.data = data
         self.model = model
@@ -29,7 +49,16 @@ class Query(Base):
 
         self.counter = counter
 
-    def __call__(self, trainer, force=False, *args, **kwargs):
+    def __call__(self, trainer: Trainer, force: bool = False, *args, **kwargs) -> Union[None, list]:
+        """
+        Queries the data for new samples.
+
+        Args:
+            trainer (Trainer): Trainer object.
+            force (bool): Whether to force query, ignoring the query_every and warmup settings.
+        Returns:
+            Union[None, list]: List of indices that have been queried.
+        """
         if not force:
             if self.cfg.warmup and not self.cfg.inference_before_warmup and self.counter < self.cfg.warmup:
                 return None
@@ -50,7 +79,13 @@ class Query(Base):
         self.data.query_counter += 1
         return query
 
-    def query(self):
+    def query(self) -> Union[None, list]:
+        """
+        Queries the data for new samples.
+
+        Returns:
+            Union[None, list]: List of indices that have been queried.
+        """
         start = time.time()
         self.n_samples = self.cfg.n_samples * self.counter if self.cfg.incremental else self.cfg.n_samples
         self.log.debug(f"Querying data for {self.n_samples} samples...")
@@ -80,6 +115,12 @@ class Query(Base):
         return [q for query in queries for q in query]
 
     def inference(self) -> dict:
+        """
+        Infers the unlabelled data and returns the scores.
+
+        Returns:
+            dict: Scores for the unlabelled data.
+        """
         scores = {}
         inference_counter = 0
         self.model.eval()
@@ -173,9 +214,19 @@ class Query(Base):
             return scores
 
 
-def extract_features(data_loader, model, device):
+def extract_features(
+    data_loader: DataLoader, model: Model, device: torch.device
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Based on pytorchood.utils.extract_features
+    Extracts features and embeddings from the model.
+
+    Args:
+        data_loader (DataLoader): DataLoader.
+        model (Model): Model.
+        device (torch.device): Device.
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: Features, embeddings, logits, labels.
     """
     buffer = TensorBuffer()
     with torch.no_grad():

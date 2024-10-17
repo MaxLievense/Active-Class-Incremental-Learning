@@ -1,6 +1,0 @@
-- torchvision.transforms.Resize:
-    size: [232, 232]
-    antialias: True
-- torchvision.transforms.CenterCrop:
-    size: 224
-- torchvision.transforms.ToTensor:

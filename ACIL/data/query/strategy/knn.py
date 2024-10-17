@@ -7,10 +7,13 @@ from ACIL.data.query.strategy.base import BaseStrategy
 
 
 class KNN(knn, BaseStrategy):
+    """Interface for KNN strategy."""
+
     use_latent = True
     use_fit = True
 
     def __init__(self, model, name, k, **cfg) -> None:  # pylint: disable=super-init-not-called
+        """Initializes the strategy."""
         assert model.cfg.network.extra_fc is not None, "KNN requires extra_fc (latent) layer."
         self.model = model.network.forward_latent
         self.k = k
@@ -18,10 +21,7 @@ class KNN(knn, BaseStrategy):
         self.knn: NearestNeighbors = NearestNeighbors(n_neighbors=k + 1, n_jobs=-1, **cfg)
 
     def predict_features(self, z: Tensor) -> Tensor:
-        """
-        :param z: features
-        :param k: number of neighbors
-        """
+        """Predicts the features."""
         dist, _ = self.knn.kneighbors(z.detach().cpu().numpy(), return_distance=True)
 
         if self.k > 0:

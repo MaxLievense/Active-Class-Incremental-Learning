@@ -1,23 +1,41 @@
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
 import wandb
 
-from ACIL.trainer.callbacks.base import Base
+from ACIL.trainer.callbacks.callbacks import BaseCallback
+
+if TYPE_CHECKING:
+    from ACIL.trainer.trainer import BaseTrainer as Trainer
 
 
-class EvalStop(Base):
-    def __init__(self, **cfg):
-        super().__init__(cfg)
+class EvalStop(BaseCallback):
+    """Callback to stop training early based on validation performance."""
+
+    def __post_init__(self):
+        """Initialize the callback."""
         self.reset()
         self.patience = self.cfg.patience
         self.warmup = self.cfg.warmup
 
-    def reset(self):
+    def reset(self) -> None:
+        """Reset the best validation metric and patience counter."""
         self.best_val = -float("inf")
         self.patience_counter = 0
         self.last_epoch = -1
 
-    def __call__(self, trainer, epoch, **_):
+    def __call__(self, trainer: Trainer, epoch: int, **_) -> bool:
+        """
+        Stop training early if the validation metric does not improve.
+
+        Args:
+            trainer: Trainer object.
+            epoch: Current epoch.
+        Returns:
+            bool: Whether to stop training
+        """
         if epoch < self.last_epoch:
             self.reset()
 

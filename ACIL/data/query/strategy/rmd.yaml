@@ -1,4 +1,2 @@
 _target_: ACIL.data.query.strategy.rmd.RMD
 name: RMD
-
-score_adjustment: 0.000000001

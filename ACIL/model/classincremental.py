@@ -1,37 +1,34 @@
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING, Generator, Tuple
 
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-from ACIL.model.model import Model
+from ACIL.model.model import BaseModel
 from ACIL.utils.subsets import split_holdout
 
+if TYPE_CHECKING:
+    from ACIL.data.data import Data
+    from ACIL.trainer.trainer import BaseTrainer as Trainer
 
-class ClassIncrementalModel(Model):
-    def _init_modules(self):
-        self.n_classes = int(self.data._n_classes * (1 + self.data.cfg.extra_classes))
-        self.log.debug(f"Initializing model with {self.n_classes} classes...")
-        self._init_network()
-        self._init_criterion()
 
-    def _init_network(self):
-        self.network = instantiate(DictConfig(self.cfg.network), n_classes=self.n_classes, device=self.device)
-        self.network.to(self.device)
-        self.log.info(f"Loaded model:\n{self.network}")
+class ClassIncrementalModel(BaseModel):
+    """Variants of the model that are trained in a class incremental, where the model query the data after training."""
 
-    def _init_criterion(self):
-        self.criterion = instantiate(DictConfig(self.cfg.criterion))
-        self.criterion.to(self.device)
-        self.log.info(f"Loaded criterion:\n{self.criterion}")
-
-    def pretrain(self, trainer):
+    def pretrain(self, trainer: Trainer) -> None:
+        """Pretrain step for the model."""
         trainer.data.get_query(self)
 
-    def postepoch(self, trainer):
+    def postepoch(self, trainer: Trainer) -> None:
+        """Postepoch step for the model."""
         trainer.data.query(trainer)
         self.update_fc(trainer)
 
-    def update_fc(self, trainer):
+    # pylint: disable=protected-access
+    def update_fc(self, trainer: Trainer) -> None:
+        """Update the fully connected layer of the model, if novel classes are found."""
         if self.cfg.fc.update and trainer.data._n_classes > self.n_classes:
             self.log.info(f"Adding {trainer.data._n_classes - self.n_classes} new classes to fc.")
             self.n_classes = trainer.data._n_classes
@@ -44,24 +41,28 @@ class ClassIncrementalModel(Model):
 
 
 class QueryAfterTrain(ClassIncrementalModel):
-    def pretrain(self, trainer):
-        trainer.data.get_query(self)
+    """Model that queries the data after training."""
 
-    def postepoch(self, trainer):
-        pass
+    def postepoch(self, trainer: Trainer) -> None:
+        """Override postepoch to query the data."""
 
-    def posttrain(self, trainer):
+    def posttrain(self, trainer: Trainer) -> None:
+        """Posttrain query the data."""
         if not self.cfg.query:
             return
         trainer.data.query(trainer, force=True)
 
 
 class SteppedFrozenModel(ClassIncrementalModel):
+    """Model that trains the backbone and the fc in different steps."""
+
     def __init__(self, *args, **kwargs):
+        """Initialize the model."""
         super().__init__(*args, **kwargs)
         self._last_step = -1
 
-    def preepoch(self, trainer):
+    def preepoch(self, trainer: Trainer) -> None:
+        """Preepoch step for the model. Freezes the backbone and trains the fc depending on the step configurations."""
         step = trainer.step
         if self._last_step == step:
             return
@@ -82,10 +83,11 @@ class SteppedFrozenModel(ClassIncrementalModel):
         else:
             raise ValueError(f"Step {step} not implemented.")
 
-    def postepoch(self, trainer):
-        pass
+    def postepoch(self, trainer: Trainer) -> None:
+        """Override postepoch to query the data."""
 
-    def posttrain(self, trainer):
+    def posttrain(self, trainer: Trainer) -> None:
+        """Posttrain query the data."""
         if not self.cfg.query:
             return
         trainer.data.query(trainer, force=True)
@@ -93,7 +95,10 @@ class SteppedFrozenModel(ClassIncrementalModel):
 
 
 class HoldoutModel(SteppedFrozenModel):
-    def preepoch(self, trainer):
+    """Model that uses a holdout set for validation."""
+
+    def preepoch(self, trainer: Trainer) -> None:
+        """Preepoch step for the model."""
         super().preepoch(trainer)
         if not hasattr(self, "_train_data_indices") or len(trainer.data.train_data.indices) > len(
             self._train_data_indices  # pylint: disable=E0203
@@ -105,20 +110,40 @@ class HoldoutModel(SteppedFrozenModel):
             self.cfg.holdout,
         )
 
-    def postepoch(self, trainer):
+    def postepoch(self, trainer: Trainer) -> None:
+        """Postepoch step for the model."""
         trainer.data.train_data.indices = deepcopy(self._train_data_indices)
 
 
 class KFoldModel(SteppedFrozenModel):
+    """Model that uses KFold for validation."""
+
     class KFold:
+        """KFold class that wraps the sklearn KFold."""
+
         def __init__(self, cfg: DictConfig):
+            """
+            Initialize the KFold object.
+
+            Args:
+                cfg (DictConfig): Hydra configuration.
+            """
             self.kfold = instantiate(cfg)
 
-        def split(self, dataset):
+        def split(self, dataset) -> Generator[Tuple[list, list], None, None]:
+            """
+            Split the dataset into train and validation indices.
+
+            Args:
+                dataset: Dataset to split.
+            Returns:
+                Tuple[list, list]: Train and validation indices.
+            """
             for train_idx, val_idx in self.kfold.split(dataset):
                 yield train_idx, val_idx
 
-    def preepoch(self, trainer):
+    def preepoch(self, trainer: Trainer) -> None:
+        """Preepoch step for the model."""
         super().preepoch(trainer)
         if not hasattr(self, "_kfold"):
             self._kfold = self.KFold(self.cfg.kfold)
@@ -141,12 +166,13 @@ class KFoldModel(SteppedFrozenModel):
         if self._n_fold == self.cfg.kfold.n_splits:
             self._n_fold = 0
 
-    def postepoch(self, trainer):
+    def postepoch(self, trainer: Trainer) -> None:
+        """Postepoch step for the model."""
         trainer.data.train_data.indices = deepcopy(self._train_data_indices)
 
-    def posttrain(self, trainer):
+    def posttrain(self, trainer: Trainer) -> None:
         """
-        If stopped early, the postepoch will not go
+        If stopped early, the postepoch will not trigger. This will make sure the data is queried after training.
         """
         self.postepoch(trainer)
         return super().posttrain(trainer)

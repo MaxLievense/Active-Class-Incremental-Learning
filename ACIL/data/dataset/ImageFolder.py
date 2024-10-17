@@ -31,15 +31,21 @@ class ImageFolder(TorchImageFolder):
     """
 
     def __init__(self, *args, **kwargs):
+        """
+        Initializes the ImageFolder object. Uses cache to store the classes.
+        """
         if "loader" not in kwargs:
             kwargs["loader"] = default_loader
         self.cache = os.path.join(kwargs["root"], ".cache", "classes.pkl") if not hasattr(self, "cache") else self.cache
         super().__init__(*args, **kwargs)
 
     @cache_file
-    def find_classes(self, root_directory: str):
+    def find_classes(self, root_directory: str) -> tuple[list[str], dict[str, int]]:
         """
         Overwrites the original method to keep the hierarchy of the folders.
+
+        Args:
+            root_directory (str): Root directory of the dataset.
         """
         classes = []
 
@@ -54,15 +60,21 @@ class ImageFolder(TorchImageFolder):
 
 
 class PartialImageFolder(ImageFolder):
+    """Variant of ImageFolder that only loads the specified classes."""
+
     def __init__(self, families: list, *args, **kwargs):
+        """Initializes the PartialImageFolder object. Uses cache to store the classes."""
         self.families = families
         self.cache = os.path.join(kwargs["root"], ".cache", f"classes_{'_'.join(sorted(self.families))}.pkl")
         super().__init__(*args, **kwargs)
 
     @cache_file
-    def find_classes(self, root_directory: str):
+    def find_classes(self, root_directory: str) -> tuple[list[str], dict[str, int]]:
         """
         Overwrites the original method to keep the hierarchy of the folders.
+
+        Args:
+            root_directory (str): Root directory of the dataset.
         """
         classes = []
         for family in self.families:

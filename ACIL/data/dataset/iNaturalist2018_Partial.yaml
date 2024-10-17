@@ -1,7 +1,7 @@
 defaults:
   - dataset
-  - transforms@training_transforms: 224_flip_color
-  - transforms@dataset_transforms: normalize
+  - ../transforms@training_transforms: 224_flip_color
+  - ../transforms@dataset_transforms: normalize
 
 dataset_name: iNaturalist2018_Partial
 n_classes: -1

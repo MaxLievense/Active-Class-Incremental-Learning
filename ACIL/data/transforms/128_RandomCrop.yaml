@@ -1,4 +1,0 @@
-- torchvision.transforms.RandomResizedCrop:
-    size: [128, 128]
-    antialias: True
-- torchvision.transforms.ToTensor:

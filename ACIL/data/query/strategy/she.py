@@ -7,6 +7,8 @@ from ACIL.data.query.strategy.base import BaseStrategy
 
 
 class SHE(she, BaseStrategy):
+    """Interface for SHE strategy."""
+
     use_fit = True
     use_features = True
 
@@ -16,14 +18,8 @@ class SHE(she, BaseStrategy):
         super().__init__(model=backbone, head=head, **cfg)
 
     def fit_features(self, features, labels, device):
-        # return super().fit_features(z=features.to(device), y=labels.to(device))
         """
         Fixes the issue where score could be NaN
-
-        Calculates mean patterns per class.
-
-        :param z: features to fit
-        :param y: labels
         """
         z = features.to(device)
         y = labels.to(device)
@@ -58,6 +54,7 @@ class SHE(she, BaseStrategy):
         return self
 
     def predict_features(self, features):
+        """Predicts the features."""
         return super().predict_features(z=features)
 
     def select(self, scores: np, n_samples: int) -> np:

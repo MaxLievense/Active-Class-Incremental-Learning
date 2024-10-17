@@ -22,7 +22,7 @@ kfold: False
 
 initial:
   type: random # random or balanced.
-  size: 5000
+  size: 1500
   reorder: True
 
-extra_classes: 0 # 0.1 is 10% of the total number of classes
+extra_classes: 0 # Legacy: 0.1 is 10% of the total number of classes

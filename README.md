@@ -53,32 +53,70 @@ data
 Any dataset can be adapted to work within this research framework. We have included `torchvision`'s MNIST dataset in `ACIL/data/dataset/MNIST.yaml` to demonstrate the configurations. 
 
 ## Running experiments
+These examples use the Places365-LT dataset, however, any torchvision compatible dataset will work in this framework.
+The option used in the paper were:
+```bash
++data/dataset=Places365_LT data.query.n_samples=1500
++data/dataset=ImageNet_LT data.query.n_samples=2000
++data/dataset=iNaturalist2018_Partial data.dataset.data.families=[Plantae] data.query.n_samples=3000
+```
 ### Single step Open-set Recognition
+
+##### Frozen
 ``` bash
 python3 ACIL/main.py --config-name=osr \
-    # Frozen
-    +trainer=trainer +trainer/scheduler=StepLR +model=queryaftertrain \
-    # Both
+    +trainer=trainer +model=queryaftertrain \
+    +data/dataset=Places365_LT \
+    +data/query/strategy=energy \
+    +model/ResNet@model.network=ResNet50 \
+    model.network.freeze=True
+```
+
+##### Both
+``` bash
+python3 ACIL/main.py --config-name=osr \
     +trainer=finetuned +model=steppedmodelAL \
-    \
     +data/dataset=Places365_LT \
     +data/query/strategy=energy \
     +model/ResNet@model.network=ResNet50 
 ```
 
 ### Active Class-Incremental Learning
+
+##### Frozen
 ``` bash
-python3 ACIL/main.py --config-name=osr \
-    # Frozen
-    +trainer=steppedtrainer +trainer/scheduler=StepLR \ 
-    # Both
-    +trainer=finetuned +model=steppedmodelAL \ 
-    \
+python3 ACIL/main.py --config-name=ACIL \
+    +trainer=steppedtrainer \
     +data/dataset=Places365_LT \
     ~data.dataset.val \
     +data/query/strategy=energy \
-    +model/ResNet@model.network=ResNet50 
+    +model/ResNet@model.network=ResNet50 \
+    model.steps=[0,None] trainer.steps=1
 ```
+
+##### Both Continuous
+``` bash
+python3 ACIL/main.py --config-name=ACIL \
+    +trainer=finetuned +model=steppedmodelAL \
+    +data/dataset=Places365_LT \
+    ~data.dataset.val \
+    +data/query/strategy=energy \
+    +model/ResNet@model.network=ResNet50 \
+    model.reload_model_on_new_classes=False \
+    model.fc.transfer_weights=True
+```
+
+##### Both Reload
+``` bash
+python3 ACIL/main.py --config-name=ACIL \
+    +trainer=finetuned +model=steppedmodelAL \ 
+    +data/dataset=Places365_LT \
+    ~data.dataset.val \
+    +data/query/strategy=energy \
+    +model/ResNet@model.network=ResNet50 \
+    model.reload_model_on_new_classes=True
+```
+
 For ACIL, `~data.dataset.val` is required, otherwise the predefined validation set is used.
 
 ### Configurations

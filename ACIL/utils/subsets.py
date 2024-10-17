@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Sequence, Union
+from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data import Subset as TorchSubset
+from torch.utils.data import random_split
 
 from ACIL.utils.cache import cache_file
 
@@ -17,16 +18,24 @@ if TYPE_CHECKING:
 
 
 class Subset(TorchSubset):
-    """Created so that Subsets can be created from Subsets, which is not possible with Torch's Subset."""
+    """Created so Subsets can be created from Subsets, which is not possible with Torch's Subset."""
 
     def __init__(
         self,
         dataset: Union[Dataset, Subset, TorchSubset],
         indices: Sequence[int] = None,
-        transform=None,
+        transform: Optional[transforms] = None,
         *arg,
         **kwargs,
     ):
+        """
+        Initializes the Subset object.
+
+        Args:
+            dataset (Union[Dataset, Subset, TorchSubset]): Dataset to create the subset from.
+            indices (Sequence[int]): Indices to include in the subset.
+            transform (Optional[transforms]): Transformation to apply to the subset.
+        """
         if isinstance(dataset, Subset):
             indices = [dataset.indices[i] for i in indices] if indices is not None else dataset.indices
             self.class_mapping = dataset.class_mapping
@@ -47,15 +56,18 @@ class Subset(TorchSubset):
 
     @property
     def transform(self):
+        """Getter for the transform property."""
         return self._transform
 
     @transform.setter
     def transform(self, transform):
+        """Setter for the transform property."""
         self._transform = transform
         self.dataset.transform = transform
 
     @property
     def targets(self):
+        """Getter for the targets property."""
         return [self.dataset.targets[i] for i in self.indices]
 
 
@@ -64,7 +76,7 @@ def split_dataset_class_balanced(
     n_samples: int,
     seed: int,
     minimum: int = 3,
-):
+) -> tuple[Subset, Subset]:
     """
     Splits dataset into A and B, where B has n_samples per class and A has the rest.
 
@@ -73,6 +85,8 @@ def split_dataset_class_balanced(
         n_samples: Number of samples per class in B.
         seed: Seed for random generator.
         minimum: Minimum number of samples per class left in A.
+    Returns:
+        tuple[Subset, Subset]: A and B subsets.
     """
     np.random.seed(seed)
 
@@ -105,7 +119,7 @@ def split_holdout(
     n_samples: int,
     seed: int = None,
     probability: float = 0.5,
-):
+) -> tuple[Subset, Subset]:
     """
     Makes an holdout split of the dataset. It returns, A (train) and B (val), where B has n_samples and A the rest.
 
@@ -114,6 +128,8 @@ def split_holdout(
         n_samples: Number of samples in B.
         seed: Seed for random generator.
         probability: Propability of a sample to be in B if less then n_samples are available.
+    Returns:
+        tuple[Subset, Subset]: A and B subsets.
     """
     if seed:
         np.random.seed(seed)
@@ -151,7 +167,18 @@ def split_dataset(
     random: bool = True,
     transform: transforms = None,
 ) -> tuple[Subset, Subset]:
-    from torch.utils.data import random_split
+    """
+    Randomly splits the dataset into two subsets, A and B, where A has split_n samples and B the rest.
+
+    Args:
+        dataset: Dataset to split.
+        split_n: Number of samples in A.
+        seed: Seed for random generator.
+        random: If True, the split is random, otherwise it is class balanced.
+        transform: Transformation to apply to the subset.
+    Returns:
+        tuple[Subset, Subset]: A and B subsets.
+    """
 
     if random:
         split_A, split_B = random_split(
@@ -193,7 +220,21 @@ def make_LT_dataset(
     distribution: str = "pareto",
     **kwargs,
 ) -> Subset:
-    """Returns a tailed subset of the dataset following a selected distribution."""
+    """
+    Returns a tailed subset of the dataset following a selected distribution.
+
+    Args:
+        dataset: Dataset to create the tailed dataset from.
+        alpha: Parameter for the distribution.
+        logger: Logger to log information.
+        seed: Seed for random generator.
+        minimal: Minimum number of samples per class.
+        shuffle: If True, the classes are shuffled.
+        distribution: Distribution to follow for the tailing.
+        **kwargs: Additional arguments for the distribution
+    Returns:
+        Subset: Tailed dataset.
+    """
 
     @cache_file
     def select_indices(_self: dict, dataset: Dataset, indices: list[int]) -> Subset:

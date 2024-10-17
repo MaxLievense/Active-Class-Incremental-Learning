@@ -5,20 +5,24 @@ from ACIL.data.query.strategy.base import BaseStrategy
 
 
 class RMD(rmd, BaseStrategy):
+    """Interface for RMD strategy."""
+
     use_fit = True
     use_features = True
     use_model = True
 
-    def __init__(self, model, name, score_adjustment, **cfg) -> None:
+    def __init__(self, model, name, **cfg) -> None:
+        """Initializes the strategy."""
         model = model.network.forward_backbone
-        self.score_adjustment = score_adjustment
         super().__init__(model=model, **cfg)
 
     def fit_features(self, features, labels, device):
+        """Fits the features."""
         return super().fit_features(z=features, y=labels, device=device)
 
     def predict_features(self, features):
-        return super().predict_features(z=features) * self.score_adjustment
+        """Predicts the features."""
+        return super().predict_features(z=features)
 
     def select(self, scores: np, n_samples: int) -> np:
         """

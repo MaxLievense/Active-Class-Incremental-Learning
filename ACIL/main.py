@@ -18,14 +18,23 @@ if TYPE_CHECKING:
 
 
 class Runner(Base):
-    def __init__(self, cfg: DictConfig) -> None:
-        super().__init__(cfg=cfg)
+    """Core class which initializes the run."""
+
+    def __init__(self, cfg: DictConfig):
+        """
+        Initializes the Runner object.
+
+        Args:
+            cfg (DictConfig): Hydra configuration.
+        """
+        super().__init__(cfg)
         self._hydra_cfg = HydraConfig.get()
         self.log.info(f"Overrides:\n{OmegaConf.to_yaml(self._hydra_cfg.overrides.task)}")
-        self.log.info(f"Config:\n{OmegaConf.to_yaml(self.cfg)}")
+        self.log.info(f"Config:\n{OmegaConf.to_yaml(self.cfg, resolve=True)}")
         self.setup()
 
     def setup(self) -> torch.device:
+        """Setup the run, includes setting seeds, initializing wandb and setting the device."""
         _overrides_cfg = {
             k: v
             for override in self._hydra_cfg.overrides.task
@@ -39,25 +48,26 @@ class Runner(Base):
         )
         self.set_seeds()
         self.device = torch.device(self.cfg.device)
-        self.log.info(f"Device: {self.device}")
         torch.cuda.empty_cache()
 
     def build(self):
-        self.data = instantiate(
-            self.cfg.data,
-            model_transforms=self.cfg.model.network.get("transforms", []),
-            device=self.device,
-            _recursive_=False,
-        )
+        """Builds the necessary components for the run, including data, model and trainer."""
+        self.data = instantiate(self.cfg.data, device=self.device, _recursive_=False)
         self.model = instantiate(self.cfg.model, device=self.device, data=self.data, _recursive_=False)
         self.trainer = instantiate(
-            self.cfg.trainer, device=self.device, model=self.model, data=self.data, _recursive_=False
+            self.cfg.trainer,
+            device=self.device,
+            model=self.model,
+            data=self.data,
+            _recursive_=False,
         )
 
     def run(self):
+        """Run the run."""
         self.trainer.run()
 
     def set_seeds(self):
+        """Set the seeds for reproducibility."""
         if self.cfg.seed is None:
             seed = np.random.randint(0, 2**8 - 1)
             self.log.warning(f"Setting (dataset) seed to: {seed}")
@@ -70,8 +80,10 @@ class Runner(Base):
             torch.cuda.manual_seed_all(self.cfg.seed)
 
 
+# pylint: disable=I1101
 @hydra.main(version_base="1.2", config_path=".", config_name="main")
 def main(cfg: DictConfig):
+    """Main function to run the experiment."""
     runner = Runner(cfg)
     runner.build()
     runner.run()

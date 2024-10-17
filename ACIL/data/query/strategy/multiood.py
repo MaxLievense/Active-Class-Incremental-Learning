@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -10,8 +13,19 @@ from torch import Tensor
 from ACIL.utils.base import Base
 from ACIL.utils.parse import match_parameters
 
+if TYPE_CHECKING:
+    from ACIL.model.model import BaseModel as Model
+
 
 class MultiOOD(Detector, Base):
+    """
+    MultiOOD strategy to combine multiple OOD strategies. It inferences the model once and uses its outputs for each
+    strategy. It then selects the samples based on the combined scores of the strategies.
+
+    The index of `strategies` is used across all created Tensors, implying that if the input is of N samples, the output
+    is of shape (N, len(strategies)).
+    """
+
     use_fit = None
     use_features = None
     use_latent = None
@@ -19,7 +33,14 @@ class MultiOOD(Detector, Base):
     classifier = None
     labelled_feedback = False
 
-    def __init__(self, model, **cfg) -> None:
+    def __init__(self, model: Model, **cfg: dict):
+        """
+        Initializes the MultiOOD object.
+
+        Args:
+            model (Model): Model object.
+            **cfg (dict): Hydra configuration.
+        """
         Base.__init__(self, cfg)
         self.model = model
         self.strategies = {}
@@ -36,6 +57,7 @@ class MultiOOD(Detector, Base):
         self.selection_logits = None
 
     def reset(self):
+        """Resets the strategies."""
         data = {}
         for name, (strategy, t) in self.strategies.items():
             start = time.time()
@@ -46,9 +68,20 @@ class MultiOOD(Detector, Base):
         wandb.log(data, commit=False)
 
     def fit(self, *args, **kwargs):
+        """Fit the strategies."""
         raise NotImplementedError("Query should fit (thus extract_features) in inference()")
 
-    def fit_features(self, features, logits, labels, z, device):
+    def fit_features(self, logits: Tensor, labels: Tensor, features: Tensor, z: Tensor, device: torch.device):
+        """
+        Fit the strategies with the provided features.
+
+        Args:
+            logits (Tensor): Logits of the model.
+            labels (Tensor): Labels of the model.
+            features (Tensor): Features of the model.
+            z (Tensor): Latent of the model.
+            device (torch.device): Device to run the fitting on
+        """
         args = {
             "logits": logits,
             "labels": labels,
@@ -64,6 +97,11 @@ class MultiOOD(Detector, Base):
     def predict(self, x: Tensor) -> Tensor:
         """
         Caclulate uncertainty for inputs
+
+        Args:
+            x (Tensor): Input tensor
+        Returns:
+            Tensor: Scores for each strategy
         """
         if self.model is None:
             raise ModelNotSetException
@@ -82,11 +120,13 @@ class MultiOOD(Detector, Base):
         return Tensor(scores)
 
     def predict_features(self, logits: Tensor) -> Tensor:
+        """Predicts the features for the strategies."""
         raise NotImplementedError(
             "MultiOOD needs to be able to get latent, so use predict() instead of predict_features()"
         )
 
     def score(self, logits: Tensor) -> Tensor:
+        """Scores the strategies."""
         raise NotImplementedError("MultiOOD does not score, if needed, a Classifier should be used.")
 
     def select_per_strategy(self, scores: np, n_samples: int) -> Tensor:
@@ -94,6 +134,12 @@ class MultiOOD(Detector, Base):
         Returns a tensor of shape (n_strategies, n_samples) with the selected indices per strategy.
         E.g.:   [[0, 1, 2], [3, 4, 5], [6, 7, 8]] for 3 strategies and 9 samples.
                 Where [0, 1, 2] are the selected indexes by the 0th strategy.
+
+        Args:
+            scores (np): Scores for each strategy.
+            n_samples (int): Number of samples to select.
+        Returns:
+            Tensor: Selected indices per strategy.
         """
         strategy_selections = torch.empty((len(self.strategies), n_samples))
         for i, (name, (strategy, t)) in enumerate(self.strategies.items()):
@@ -110,6 +156,12 @@ class MultiOOD(Detector, Base):
         Provided the strategy_selections. Selects n_samples from the collection of strategy_selections.
         Follow the order where the order of selections is maintained per strategy,
             so pick the first, then the second, etc for each strategy.
+
+        Args:
+            scores (np): Scores for each strategy.
+            n_samples (int): Number of samples to select.
+        Returns:
+            list: Selected indices.
         """
         strategy_selections = self.select_per_strategy(scores, n_samples).tolist()
         selection = set()
@@ -131,6 +183,14 @@ class MultiOOD(Detector, Base):
         return list(selection)
 
     def match_feedback(self, feedback: np) -> list:
+        """
+        Matches the feedback to the strategy selections.
+
+        Args:
+            feedback (np): Feedback for the selections.
+        Returns:
+            list: Matched feedback.
+        """
         feedback_mapping = {int(index): value for index, value in zip(self.selection, feedback)}
         matched_feedback = []
         for strategy_selection in self.strategy_selections:
@@ -153,6 +213,14 @@ class MultiOOD(Detector, Base):
         return matched_feedback
 
     def feedback(self, feedback: np) -> list:
+        """
+        Provides feedback to the strategies. Indicating how well the selected samples were.\
+        
+        Args:
+            feedback (np): Feedback for the selections.
+        Returns:
+            list: Matched feedback.
+        """
         assert self.strategy_selections is not None, "No latest strategy selections available."
         assert self.selection is not None, "No latest selection available."
         assert self.selection_logits is not None, "No latest selection logits available."
@@ -167,28 +235,67 @@ class MultiOOD(Detector, Base):
 
 
 class MultiOODChecker(MultiOOD):
-    def __init__(self, model, **cfg) -> None:
+    """
+    Variation of MultiOOD that only selects the samples based on a single strategy but runs multiple strategies for
+    evaluations.
+    """
+
+    def __init__(self, model: Model, **cfg: dict):
+        """
+        Initializes the MultiOODChecker object.
+
+        Args:
+            model (Model): Model object.
+            **cfg (dict): Hydra configuration
+        """
         super().__init__(model, **cfg)
         self.log.info(f"MultiOODChecker initialized, selecting with strategy: {self.cfg.name}")
 
     def select(self, scores: np, n_samples: int) -> np:
+        """
+        Selects the samples based on the provided scores.
+
+        Args:
+            scores (np): Scores for each strategy.
+            n_samples (int): Number of samples to select.
+        Returns:
+            list: Selected indices.
+        """
         strategy_idx = list(self.strategies.keys()).index(self.cfg.name)
         return self.strategies[self.cfg.name][0].select(
             scores={index: _scores[strategy_idx] for index, _scores in scores.items()}, n_samples=n_samples
         )
 
     def feedback(self, feedback: np) -> list:
-        pass
+        """Provides feedback to the strategies."""
 
 
 class MultiOODCheckerAndSampler(MultiOODChecker):
-    def __init__(self, model, **cfg) -> None:
+    """Variation of MultiOODChecker that selects the samples based on multiple strategies."""
+
+    def __init__(self, model: Model, **cfg: dict):
+        """
+        Initializes the MultiOODCheckerAndSampler object.
+
+        Args:
+            model (Model): Model object.
+            **cfg (dict): Hydra configuration.
+        """
         super().__init__(model, **cfg)
         if self.cfg.sample_strategies == "all":
             self.cfg.sample_strategies = list(self.strategies.keys())
         self.log.info(f"MultiOODCheckerAndSampler initialized, selecting with strategy: {self.cfg.sample_strategies}")
 
     def select(self, scores: np, n_samples: int) -> np:
+        """
+        Selects the samples based on the provided scores.
+
+        Args:
+            scores (np): Scores for each strategy.
+            n_samples (int): Number of samples to select.
+        Returns:
+            list: Selected indices.
+        """
         selection = np.empty((0, 2), dtype=int)
         for i, strategy_name in enumerate(self.cfg.sample_strategies):
             strategy_idx = list(self.strategies.keys()).index(strategy_name)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, List
 
 import numpy as np
 import torch
@@ -28,6 +28,8 @@ np.seterr(divide="ignore", invalid="ignore")
 
 @dataclass
 class Metrics:
+    """Class to store and calculate metrics for a classification task."""
+
     name: str
     y_true: np.ndarray
     y_out: np.ndarray
@@ -35,6 +37,7 @@ class Metrics:
     labels: List[int]
 
     def __post_init__(self):
+        """Calculates metrics for the classification task."""
         matrix = confusion_matrix(self.y_true, self.y_pred)
         self.per_class_accuracy = matrix.diagonal() / matrix.sum(axis=1)
         self.accuracy = accuracy_score(self.y_true, self.y_pred)
@@ -49,6 +52,7 @@ class Metrics:
         self.confusion_matrix = matrix
 
     def results(self):
+        """Returns the results of the metrics."""
         return [
             f"{self.name} {'-' * (14 - len(self.name))}",
             f"Acc:     {self.accuracy:.2%}",
@@ -61,6 +65,7 @@ class Metrics:
         ]
 
     def wandb_out(self, epoch, openset=False):
+        """Returns loggable metrics for wandb."""
         data = {
             f"eval/{self.name}_Accuracy": self.accuracy,
             f"eval/{self.name}_F1": self.f1,
@@ -88,7 +93,20 @@ def tailed_metrics(
     y_out: np.ndarray,
     y_pred: np.ndarray,
     labels: List[int],
-):
+) -> List[Metrics]:
+    """
+    Calculates metrics for the tailed classes.
+
+    Args:
+        class_mapping (dict): Mapping of classes.
+        training_class_counts (dict): Training class counts.
+        y_true (np.ndarray): True labels.
+        y_out (np.ndarray): Predicted outputs.
+        y_pred (np.ndarray): Predicted labels.
+        labels (List[int]): List of labels.
+    Returns:
+        List[Metrics]: List of metrics for the tailed classes.
+    """
     mapped_training_class_counts = {class_mapping[k]: v for k, v in training_class_counts.items()}
 
     metrics = []
@@ -115,13 +133,18 @@ def tailed_metrics(
 
 def class_metrics(
     y_true: torch.Tensor, y_out: torch.Tensor, training_epoch: int = None, data: Data = None, tag: str = "Test"
-) -> Any:
+) -> tuple[Metrics, Metrics]:
     """
     Calculates accuracy, f1-score, and confusion matrix for a given classification task.
 
     Args:
         y_true (torch.Tensor): true labels
         y_out (torch.Tensor): predicted outputs (plain model outputs)
+        training_epoch (int): training epoch
+        data (Data): data object
+        tag (str): tag for logging
+    Returns:
+        Metrics: Metrics for the classification task
     """
 
     closed_results, open_results, tailed_results = None, None, None
@@ -134,7 +157,6 @@ def class_metrics(
     y_pred = np.argmax(y_out, axis=1)
     true_classes = np.arange(y_out.shape[1])
 
-    # Excluding open class
     closed_mask = y_true != -1
     closed_results = Metrics(
         name="Closed",
@@ -144,7 +166,6 @@ def class_metrics(
         labels=true_classes[true_classes != -1],
     )
 
-    # Including open class
     if -1 in true_classes:
         open_results = Metrics(
             name="Open",
@@ -185,7 +206,17 @@ def class_metrics(
     return closed_results, open_results
 
 
-def class_coverage(targets: torch.Tensor, n_classes, thresholds: list = [5]) -> None:  # pylint: disable=W0102
+def class_coverage(targets: torch.Tensor, n_classes, thresholds: list = [5]) -> float:  # pylint: disable=W0102
+    """
+    Calculates the class coverage.
+
+    Args:
+        targets (torch.Tensor): true labels
+        n_classes (int): number of classes
+        thresholds (list): thresholds for class coverage, excluding 1
+    Returns:
+        float: class coverage
+    """
     classes, counts = np.unique(targets, return_counts=True)
     coverage = len(classes) / n_classes if n_classes else None
     data = {"Class/Coverage": coverage, "Labels/Total": len(targets), "Labels/Unique": len(classes)}
@@ -199,34 +230,37 @@ def class_coverage(targets: torch.Tensor, n_classes, thresholds: list = [5]) -> 
     return coverage
 
 
-def openset_recognition(score, labels, tag: str, q_i: int, targets=None):
+def openset_recognition(score, labels, tag: str, q_i: int, targets=None) -> tuple[float, float, float, float]:
+    """
+    Calculates openset recognition metrics.
+
+    Args:
+        score (np.ndarray): model output scores
+        labels (np.ndarray): true labels
+        tag (str): tag for logging
+        q_i (int): number of samples to consider
+        targets (np.ndarray): targets
+    Returns:
+        tuple[float, float, float, float]: FPR95, AUROC, AUPR_IN, AUPR_OUT
+    """
     try:
         if not isinstance(score, np.ndarray):
             score = np.array(score)
         if not isinstance(labels, np.ndarray):
             labels = np.array(labels)
 
-        # remove any NaN values from score and its corresponding labels
         if np.isnan(score).any():
             print(f"Found NaN values in score for {tag}, removing them.")
             mask = ~np.isnan(score)
             score = score[mask]
             labels = labels[mask]
 
-        # Calculate AUROC
         auroc = roc_auc_score(labels, score)
-
-        # Calculate Precision-Recall curve for AUPR-IN
         precision_in, recall_in, _ = precision_recall_curve(labels, score)
         aupr_in = auc(recall_in, precision_in)
-
-        # Calculate Precision-Recall curve for AUPR-OUT
-        # For AUPR-OUT, we need to consider out-of-distribution (OOD) as the positive class.
         labels_out = 1 - labels  # Reverse the labels
         precision_out, recall_out, _ = precision_recall_curve(labels_out, score)
         aupr_out = auc(recall_out, precision_out)
-
-        # Calculate FPR95
         fpr, tpr, _ = roc_curve(labels, score)
         fpr95 = fpr[np.argmax(tpr >= 0.95)]
 
